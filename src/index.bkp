@@ -1,0 +1,262 @@
+const axios=require('axios');
+const AWS = require('aws-sdk');
+const natural = require('natural');
+const re = require('re');
+const heapq = require('heapq');
+const { removeStopwords } = require('stopword')
+const uuid = require('uuid');
+const BUCKET_NAME = "utsavcloudproject";
+
+
+const AWS_REGION_NAME = "us-east-1";
+
+const headers = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*', // Allow requests from any origin (you can change this to specific origins)
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', // Specify the allowed HTTP methods
+  'Access-Control-Allow-Credentials': true, // Specify if the request can include credentials (e.g., cookies)
+};
+
+const s3 = new AWS.S3({ region: AWS_REGION_NAME });
+const sqs = new AWS.SQS({ region: AWS_REGION_NAME });
+const comprehend = new AWS.Comprehend({ region: AWS_REGION_NAME });
+
+function getTop3Sentences(sentenceScore) {
+  return Object.keys(sentenceScore)
+    .sort((a, b) => sentenceScore[b] - sentenceScore[a]) // Sort sentences by score in descending order
+    .slice(0, 3); // Get the top 3 sentences
+}
+
+async function getSummary(scrapedContent) {
+
+    // Remove all the contents from square braces
+    let refinedTextContent = scrapedContent.replace(/\[.*?\]/g, ' ');
+  
+    // Remove all the special characters
+    refinedTextContent = refinedTextContent.replace(/[_!#$%^*?/\\|~:]/g, ' ');
+  
+    // Remove all the contents from parentheses
+    refinedTextContent = refinedTextContent.replace(/\([^()]*\)/g, ' ');
+  
+    // Remove all the contents from curly braces
+    refinedTextContent = refinedTextContent.replace(/\{[^{}]*\}/g, ' ');
+  
+    // Remove all the contents from angular braces
+    refinedTextContent = refinedTextContent.replace(/\<[^<>]*\>/g, ' ');
+  
+    // Remove URLs
+    refinedTextContent = refinedTextContent.replace(/\s+\/\s+/g, ' ');
+  
+    // Remove mentions (@)
+    refinedTextContent = refinedTextContent.replace(/@\s+/g, ' ');
+  
+    // Remove trends (#)
+    refinedTextContent = refinedTextContent.replace(/#\s+/g, ' ');
+  
+    // Remove emojis, symbols, and other unicode characters
+    refinedTextContent = refinedTextContent.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}]+/gu, ' ');
+  
+    // Remove newline characters
+    refinedTextContent = refinedTextContent.replace(/\n/g, ' ');
+  
+    // Remove tab characters
+    refinedTextContent = refinedTextContent.replace(/\t/g, ' ');
+  
+    // Remove multiple spaces and replace with a single space
+    refinedTextContent = refinedTextContent.replace(/\s+/g, ' ');
+  
+    // Trim leading and trailing spaces
+    refinedTextContent = refinedTextContent.trim();
+
+
+  const sentenceTokenizer = new natural.SentenceTokenizer();
+  const sentenceToken = sentenceTokenizer.tokenize(refinedTextContent);
+
+  const wordTokenizer = new natural.WordTokenizer();
+  const wordToken = wordTokenizer.tokenize(refinedTextContent);
+
+  const filteredWordToken = removeStopwords(wordToken);
+  const frequencyDict = {};
+  for (const word of filteredWordToken) {
+    if (!frequencyDict[word]) {
+      frequencyDict[word] = 1;
+    } else {
+      frequencyDict[word]++;
+    }
+  }
+
+
+  const maxWordFreq = Math.max(...Object.values(frequencyDict));
+  for (const word in frequencyDict) {
+    frequencyDict[word] /= maxWordFreq;
+  }
+  const sentenceScore = {};
+  for (const sent of sentenceToken) {
+    for (const word of wordTokenizer.tokenize(sent.toLowerCase())) {
+      if (frequencyDict[word]) {
+        if (sent.split(' ').length < 30) {
+          if (!sentenceScore[sent]) {
+            sentenceScore[sent] = frequencyDict[word];
+          } else {
+            sentenceScore[sent] += frequencyDict[word];
+          }
+        }
+      }
+    }
+  }
+
+  const summary = getTop3Sentences(sentenceScore);
+  return summary;
+}
+
+async function doesBucketExist(bucketName) {
+  try {
+    await s3.headBucket({ Bucket: bucketName }).promise();
+    return true;
+  } catch (error) {
+    if (error.statusCode === 404) {
+      return false;
+    }
+    throw error;
+  }
+}
+
+// Function to create the S3 bucket if it doesn't exist
+async function createBucketIfNotExists(bucketName) {
+  if (!(await doesBucketExist(bucketName))) {
+    await s3.createBucket({ Bucket: bucketName }).promise();
+  }
+}
+
+
+
+module.exports.handler = async (event, context) => {
+  try {
+    const { method, content } = JSON.parse(event.body);
+
+    if (!method) {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Method not provided' }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'headers': headers,
+        }
+      };
+    }
+
+    if (method === 'url') {
+      if (!content) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: 'URL not provided' }),
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'headers': headers,
+          }
+        };
+      }
+
+      // Send the URL to the SQS queue
+      const sqsMessage = { "url":content };
+      await sqs.sendMessage({
+        QueueUrl: 'https://sqs.us-east-1.amazonaws.com/262272685619/myURLqueue',
+        MessageBody: JSON.stringify(sqsMessage)
+      }).promise();
+
+      // Wait for the response from the API Gateway (assuming it will provide the scraped content)
+      // Code for fetching the scraped content from the API Gateway goes here
+      // For example, if you're using axios:
+      // const response = await axios.get('API_GATEWAY_URL');
+      // const scrapedContent = response.data.message;
+      // For simplicity, I am directly assigning it:
+
+      const response = await axios.get('https://0u0ft297m9.execute-api.us-east-1.amazonaws.com');
+      const scrapedContent = response.data.message;
+
+      // Perform the text cleaning and summarization
+      const summary = await getSummary(scrapedContent);
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ summary }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'headers': headers,
+        }
+      };
+    } else if (method === 'content') {
+
+      console.log("jwlnvd.........................................................................")
+      if (!content) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({ error: 'Text not provided' }),
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'headers': headers,
+          }
+        };
+      }
+      await createBucketIfNotExists(BUCKET_NAME);
+
+      const randomFileName = uuid.v4() + '.txt';
+
+      // Store the content to the S3 bucket as a .txt file
+      await s3.putObject({
+        Bucket: BUCKET_NAME,
+        Key: randomFileName,
+        Body: content,
+        ContentType: 'text/plain'
+      }).promise();
+
+      // Get the content from the S3 bucket using the generated file name
+      const getObjectResponse = await s3.getObject({
+        Bucket: BUCKET_NAME,
+        Key: randomFileName
+      }).promise();
+
+      // Convert the content to a string
+      const fileContent = getObjectResponse.Body.toString();
+
+      // Perform the text cleaning and summarization directly with the provided text
+      const summary = await getSummary(fileContent);
+
+      return {
+        statusCode: 200,
+        body: JSON.stringify({ summary }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'headers': headers,
+        }
+      };
+    } else {
+      return {
+        statusCode: 400,
+        body: JSON.stringify({ error: 'Invalid method',"method":method }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'headers': headers,
+        }
+      };
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'An error occurred' }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'headers': headers,
+      }
+    };
+  }
+};
+
