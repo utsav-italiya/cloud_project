@@ -33,7 +33,7 @@ const TextComponent = () => {
   return (
     <Container maxWidth="lg">
       <Box mt={3} textAlign="center">
-        <Typography variant="h4">QuillBot - Text Summarizer</Typography>
+        <Typography variant="h4">Text Summarizer</Typography>
       </Box>
       <Grid container spacing={2} mt={3}>
         <Grid item xs={12} md={6}>

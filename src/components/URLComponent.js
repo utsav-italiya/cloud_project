@@ -42,7 +42,7 @@ const URLComponent = () => {
   return (
     <Container maxWidth="sm"> {/* Adjust the maxWidth as needed */}
       <Box mt={3} textAlign="center">
-        <Typography variant="h4">QuillBot - Website Summarizer</Typography>
+        <Typography variant="h4">Website Summarizer</Typography>
       </Box>
       <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 2, mt: 2 }}>
         <TextField
