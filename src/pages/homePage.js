@@ -2,9 +2,8 @@ import React, { useState } from 'react';
 import Button from '@mui/material/Button';
 import ButtonGroup from '@mui/material/ButtonGroup';
 import Box from '@mui/material/Box';
-import TextComponent from '../components/TextComponent'; // Import your Text component here
-import UrlComponent from '../components/URLComponent'; // Import your URL component here
-import PDFComponent from '../components/PDFComponent'; // Import your PDF component here
+import TextComponent from '../components/TextComponent'; 
+import UrlComponent from '../components/URLComponent'; 
 
 const HomePage = () => {
   const [selectedOption, setSelectedOption] = useState('Text');
@@ -38,16 +37,9 @@ const HomePage = () => {
           URL
         </Button>
 
-        <Button
-          onClick={() => handleOptionChange('PDF')}
-          variant={selectedOption === 'PDF' ? 'contained' : 'outlined'}
-        >
-          PDF
-        </Button>
       </ButtonGroup>
       {selectedOption === 'Text' ? <TextComponent /> : null}
       {selectedOption === 'URL' ? <UrlComponent /> : null}
-      {selectedOption === 'PDF' ? <PDFComponent /> : null}
     </Box>
   );
 };

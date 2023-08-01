@@ -19,16 +19,15 @@ const TextComponent = () => {
 
       setSummary(response.data.summary);
     } catch (error) {
-      // Handle error if the request fails
       console.error('Error:', error);
     }
   };
 
   const textFieldStyle = {
     border: 'none',
-    resize: 'none', // Prevents resizing of the text area
-    outline: 'none', // Removes focus outline when selected
-    boxShadow: 'none', // Removes any box shadow
+    resize: 'none', 
+    outline: 'none', 
+    boxShadow: 'none',
   };
 
   return (
@@ -47,7 +46,7 @@ const TextComponent = () => {
               variant="outlined"
               value={inputText}
               onChange={(e) => handleTextChange(e.target.value)}
-              inputProps={{ style: textFieldStyle }} // Apply the custom style to the input
+              inputProps={{ style: textFieldStyle }} 
               sx={{ flex: 1 }}
             />
             <Box mt={2} textAlign="center" mb={2}>

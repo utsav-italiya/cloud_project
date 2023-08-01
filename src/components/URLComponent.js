@@ -10,14 +10,15 @@ const URLComponent = () => {
     setURL(event.target.value);
   };
 
-  const API_KEY=process.env.REACT_APP_TEXT_LAMBDA;
+  const API_KEY = process.env.REACT_APP_TEXT_LAMBDA;
 
   const handleSummarize = async () => {
     try {
-      const response = await axios.post(`${API_KEY}/website-summary`, {
+      const requestBody = {
         method: 'url',
-        content: url,
-      });
+        content: url
+      }
+      const response = await axios.post(`${API_KEY}/website-summary`, requestBody)
 
       console.log(response)
 
@@ -43,7 +44,7 @@ const URLComponent = () => {
       <Box mt={3} textAlign="center">
         <Typography variant="h4">QuillBot - Website Summarizer</Typography>
       </Box>
-      <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 2, mt :2}}>
+      <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 2, mt: 2 }}>
         <TextField
           label="Paste URL here..."
           fullWidth
